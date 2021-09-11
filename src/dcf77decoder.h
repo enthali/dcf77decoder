@@ -14,7 +14,7 @@ struct tinyTime
     uint8_t day;
     uint8_t month;
     uint8_t year;
-    uint8_t status; 
+    uint8_t status;
 };
 
 // the clock is running on the internal counter
@@ -25,7 +25,7 @@ struct tinyTime
 #define STATUS_FIRST 2
 
 // advance the count clock
-extern void secTick(long timeDelta); 
+extern void secTick(long timeDelta);
 
 // get the current time structure
 extern tinyTime getTime();
@@ -36,10 +36,10 @@ extern void setTime(struct tinyTime tTime);
 // set minute
 // get hour
 // set hour
-// .... to be implemented 
+// .... to be implemented
 
 // dcfSetup requires the signal and the reset pin the dcf module is connected to.
-extern int dcfSetup(uint8_t signalPin,uint8_t resetPin);
+extern int dcfSetup(uint8_t signalPin, uint8_t resetPin);
 // the checkSignal() function is to be called regulary, it uses the internal millis system time to measure the delay between signals
 extern int dcfCheckSignal();
 

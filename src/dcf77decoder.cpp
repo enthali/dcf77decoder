@@ -93,7 +93,7 @@ void advanceCountClock()
     {
         // more than 1000
         // advance the secTimer
-        secTimer+=delta;
+        secTimer += delta;
 
         dcfTime.sec += 1;
         if (dcfTime.sec >= 60)
@@ -380,7 +380,7 @@ int decodeTime(struct dcfStreamStruct *pDcfMsg)
         dcfTime.status = STATUS_FIRST;
     }
     secTimer = millis(); // reset the second counter
-    dcfTime.sec=0;
+    dcfTime.sec = 0;
     dcfTime.min = pDcfMsg->minOnes + pDcfMsg->minTens * 10;
     dcfTime.hour = pDcfMsg->hourOnes + pDcfMsg->hourTens * 10;
     dcfTime.weekDay = pDcfMsg->weekday;
