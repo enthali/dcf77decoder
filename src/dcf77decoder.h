@@ -24,8 +24,6 @@ struct tinyTime
 // the clock is running on the external DCF77 signal
 #define STATUS_DCF_GOOD 2
 
-// advance the count clock
-extern void secTick(long timeDelta);
 // get the current time structure
 extern tinyTime getTime();
 // set the timie using the time structure

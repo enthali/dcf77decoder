@@ -52,22 +52,20 @@ unsigned long long dcf77BitStream = 0; // 0xa6a6a6a6a6a6a6a6;
 tinyTime dcfInternalTime;
 
 // private vairables
-uint8_t buffer;                              // to store the signal history
+uint8_t sigBuffer;                           // to store the signal history
 unsigned char dcf77signalPin, dcf77resetPin; // the pins the DCF module is connected to
 unsigned long timeStamp;                     // to calculate the time passed since the last signal change
-unsigned int deltaTime;                      // to measure the time between signal changes
+int deltaTime;                               // to measure the time between signal changes
 
 // a second timer based on system millis() to advance the seconds and keep the clock running when there's bad signal
 unsigned long int secTimer;
 
 // private  functions forward declaraions
-extern int parityCheck(struct dcfStreamStruct *pDcfMsg); // parity check
-extern int decodeTime(struct dcfStreamStruct *pDcfMsg);  // time extraction
-extern uint8_t parity(uint8_t value);                    // calcualte the parity of an unsigned 8 bit word
+extern int protoParityCheck(struct dcfStreamStruct *pDcfMsg); // parity check
+extern uint8_t parity(uint8_t value);                         // calcualte the parity of an unsigned 8 bit word
+extern int decodeTime(struct dcfStreamStruct *pDcfMsg);       // time extraction
 extern void advanceCountClock();
-#ifdef DCF_DEBUG_BITSTREAM
-extern void printBitstream();
-#endif
+extern uint8_t signalDecode(unsigned long sysTime);
 
 // dcfSetup requires the signal and the reset pin the dcf module is connected to.
 int dcfSetup(uint8_t signalPin, uint8_t resetPin)
@@ -108,12 +106,6 @@ void advanceCountClock()
     // here's where we need to implement day and month advancement ...
 }
 
-/*
-wird diese Funktion aufgerufen gibt sie die Anzahl der vergangenen Sekunden seit letztem Aufruf zurück
-*/
-// internal variables
-int delta = 0;
-
 /* 
 check how much time passed since the last call. if it's more than a second, go ahead and trigger the second
 */
@@ -121,12 +113,12 @@ int checkSecond(unsigned long time)
 {
     int secCount = 0;
     // how much time has passed?
-    delta = time - secTimer;
+    deltaTime = time - secTimer;
 
     // if  1000 or more msec have passed, let's find out how much time has passed
-    for (secCount = 0; delta >= 1000; secCount++)
+    for (secCount = 0; deltaTime >= 1000; secCount++)
     {
-        delta -= 1000;       // reduce the delta
+        deltaTime -= 1000;   // reduce the delta
         secTimer += 1000;    // increase the secTime reference counter
         advanceCountClock(); // count the second
     }
@@ -145,29 +137,27 @@ tinyTime getTime()
     return (dcfInternalTime);
 }
 
-/* if signalDecode checks if the signal level changed and returns the signal code
+/* signalDecode checks if the signal level changed and returns the signal code
 0 - a bit value 0 was detected
 1 - a bit value 1 was detected
 2 - the minute pulse was detected
 3 - bit pause detected
 4 - no change detected
-signalDecode expects the system time in millis and should be called frequently
+signalDecode expects the system time in millis and the signal of the input pin
 */
-uint8_t signalDecode(unsigned long sysTime)
+uint8_t signalDecode(unsigned long sysTime, int signal)
 {
-    uint8_t signal = 0;
-
-    signal = digitalRead(dcf77signalPin); // get the current timestamp
-
     // Check if the signal has changed since the last call.
-    if (buffer != signal)
+    if (sigBuffer != signal)
     // Yes, the signal has changed
     {
         // save the signal state for the next call in buffer
-        buffer = signal;
+        sigBuffer = signal;
 
         // use the current system time, and calculate the time that has elapsed since the last call.
         deltaTime = sysTime - timeStamp;
+        // remember this time
+        timeStamp = sysTime;
 
         if (deltaTime < DCF_ZERO)
             return (0);
@@ -193,7 +183,7 @@ int dcfCheckSignal()
     // calculate the current timestamp for the next callF
     timeStamp += deltaTime;
 
-    switch (signalDecode(timeStamp))
+    switch (signalDecode(timeStamp, digitalRead(dcf77signalPin)))
     {
     case 0: // roll a 0 into the bitstream
         dcf77BitStream >>= 1;
@@ -206,7 +196,7 @@ int dcfCheckSignal()
         dcf77BitStream >>= 5;
 
         // check if a valid, consistent telegram was received
-        if (parityCheck((dcfStreamStruct *)&dcf77BitStream))
+        if (protoParityCheck((dcfStreamStruct *)&dcf77BitStream))
         {
             // ok go on
             if (decodeTime((dcfStreamStruct *)&dcf77BitStream))
@@ -235,7 +225,7 @@ int dcfCheckSignal()
 * Return OK if all parity bits are ok
 * Return ERR if one parity bit is not ok
 */
-int parityCheck(struct dcfStreamStruct *pDcfMsg)
+int protoParityCheck(struct dcfStreamStruct *pDcfMsg)
 {
     // check the minute parity bit
     if (pDcfMsg->parMin == (parity(pDcfMsg->minOnes) ^ parity(pDcfMsg->minTens)))

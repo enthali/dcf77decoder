@@ -5,19 +5,6 @@
 
 using namespace aunit;
 
-// variables to test the time functions
-tinyTime testTime1, testTime2;
-
-void setup()
-{
-    // Module is connected to
-    // Pin 2 Signal
-    // Pin 3 Power / Reset
-    dcfSetup(2, 3);
-
-    Serial.begin(115200);
-}
-
 // Enable access to internal module functions
 struct dcfStreamStruct
 {
@@ -44,13 +31,53 @@ struct dcfStreamStruct
     unsigned long long parDate : 1;        // date parity
 };
 
+// variables to test the time functions
+tinyTime testTime1, testTime2;
+
+// external variables
+
+extern unsigned long long dcf77BitStream;
+extern unsigned long secTimer;
+extern uint8_t sigBuffer;
+extern unsigned int deltaTime;
+
+// external functions
 extern void advanceCountClock();
 extern int checkSecond(unsigned long time);
-extern unsigned long long dcf77BitStream;
+extern int protoParityCheck(struct dcfStreamStruct *pDcfMsg);   // parity check
+extern uint8_t parity(uint8_t value);                           // calcualte the parity of an unsigned 8 bit word
+extern int decodeTime(struct dcfStreamStruct *pDcfMsg);         // time extraction
+extern uint8_t signalDecode(unsigned long sysTime, int signal); // deoode the signal
+
+void setup()
+{
+    // Module is connected to
+    // Pin 2 Signal
+    // Pin 3 Power / Reset
+    dcfSetup(2, 3);
+
+    Serial.begin(115200);
+}
 
 void loop()
 {
     TestRunner::run();
+}
+
+void printTime(tinyTime dcfTime)
+{
+    dcfTime = getTime();
+    Serial.print("Weekday : ");
+    Serial.print(dcfTime.weekDay);
+    Serial.print("   Time : ");
+    Serial.print(dcfTime.hour);
+    Serial.print(":");
+    Serial.print(dcfTime.min);
+    Serial.print(":");
+    Serial.print(dcfTime.sec);
+    Serial.print(" - signal status : ");
+    Serial.print(dcfTime.status);
+    Serial.println();
 }
 
 void printBitstream()
@@ -126,8 +153,6 @@ test(setGetTime)
     assertEqual(testTime1.hour, testTime2.hour);
 }
 
-extern unsigned long secTimer;
-
 test(checkSecond)
 {
     assertEqual(checkSecond(0), 0);          // Set internal time to 0, whatever the return is can be ignored at this time
@@ -140,4 +165,18 @@ test(checkSecond)
     secTimer = 0xfffff000;                   // provoke a timer overflow
     assertEqual(checkSecond(0xffffff00), 3); // very close to the overflow
     assertEqual(checkSecond(1100), 2);       // c2 sec over
+}
+
+test(signalDecode)
+{
+    sigBuffer = 0;
+    deltaTime = 0;
+    assertEqual(signalDecode(100, 0), 4);  // no signal change, expect  4 as return value
+    assertEqual(signalDecode(120, 1), 0);  // should be a bit 0
+    assertEqual(signalDecode(999, 1), 4);  // o signal change, expect  4 as return value
+    assertEqual(signalDecode(1000, 0), 3); // 1 sec signal break to 0
+    assertEqual(signalDecode(1220, 1), 1); // should be a bit 1
+    assertEqual(signalDecode(2200, 1), 4); // no signal change, expect  4 as return value
+    assertEqual(signalDecode(3000, 0), 2); // 1 sec missing -> min pulse
+    assertEqual(signalDecode(3220, 1), 1); // should be a bit 1
 }
