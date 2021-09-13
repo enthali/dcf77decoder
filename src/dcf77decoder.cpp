@@ -24,48 +24,50 @@ the decoder features a counting clock that allows to progress the time in case t
 // structs to decode the DCF77 bit stream
 struct dcfStreamStruct
 {
-    unsigned long long minStart : 1;       // Minute start bit allways 0
-    unsigned long long reserved : 14;      // reserved
-    unsigned long long antenna : 1;        // active antenna
-    unsigned long long daylightSaving : 1; // announcement daylight saving
-    unsigned long long timeZone : 2;       // timezone of the DCF sender
-    unsigned long long leapSecond : 1;     // Leap second announcement
-    unsigned long long start : 1;          // telegram start bit allways high
-    unsigned long long minOnes : 4;        // minutes
-    unsigned long long minTens : 3;        // minutes
-    unsigned long long parMin : 1;         // parity minutes
-    unsigned long long hourOnes : 4;       // hours
-    unsigned long long hourTens : 2;       // hours
-    unsigned long long parHour : 1;        // parity hours
-    unsigned long long dayOnes : 4;        // day
-    unsigned long long dayTens : 2;        // day
-    unsigned long long weekday : 3;        // day of week
-    unsigned long long monthOnes : 4;      // month
-    unsigned long long monthTens : 1;      // month
-    unsigned long long yearOnes : 4;       // year (5 -> 2005)
-    unsigned long long yearTens : 4;       // year
-    unsigned long long parDate : 1;        // date parity
+    uint64_t minStart : 1;       // Minute start bit allways 0
+    uint64_t reserved : 14;      // reserved
+    uint64_t antenna : 1;        // active antenna
+    uint64_t daylightSaving : 1; // announcement daylight saving
+    uint64_t timeZone : 2;       // timezone of the DCF sender
+    uint64_t leapSecond : 1;     // Leap second announcement
+    uint64_t start : 1;          // telegram start bit allways high
+    uint64_t minOnes : 4;        // minutes
+    uint64_t minTens : 3;        // minutes
+    uint64_t parMin : 1;         // parity minutes
+    uint64_t hourOnes : 4;       // hours
+    uint64_t hourTens : 2;       // hours
+    uint64_t parHour : 1;        // parity hours
+    uint64_t dayOnes : 4;        // day
+    uint64_t dayTens : 2;        // day
+    uint64_t weekday : 3;        // day of week
+    uint64_t monthOnes : 4;      // month
+    uint64_t monthTens : 1;      // month
+    uint64_t yearOnes : 4;       // year (5 -> 2005)
+    uint64_t yearTens : 4;       // year
+    uint64_t parDate : 1;        // date parity
 };
 // buffer to receive the dcf bitstream
-unsigned long long dcf77BitStream = 0; // 0xa6a6a6a6a6a6a6a6;
+uint64_t dcf77BitStream = 0; // 0xa6a6a6a6a6a6a6a6;
 // structure to capture the decoded dcfTime
 tinyTime dcfInternalTime;
 
-// private vairables
+// private global vairables
 uint8_t sigBuffer;                           // to store the signal history
 unsigned char dcf77signalPin, dcf77resetPin; // the pins the DCF module is connected to
-unsigned long timeStamp;                     // to calculate the time passed since the last signal change
-int deltaTime;                               // to measure the time between signal changes
+unsigned long int secTimer;                  // a second timer based on system millis() to advance the seconds and keep the clock running when there's bad signal
 
-// a second timer based on system millis() to advance the seconds and keep the clock running when there's bad signal
-unsigned long int secTimer;
+// temporary "reuseable" variables only used within functions w/o conext outside of any function
+unsigned long timeStamp = 0; // to calculate the time passed since the last signal change
+int deltaTime = 0;           // to measure the time between signal changes
+int retVal = 0;              // generic return valriable
 
 // private  functions forward declaraions
-extern int protoParityCheck(struct dcfStreamStruct *pDcfMsg); // parity check
-extern uint8_t parity(uint8_t value);                         // calcualte the parity of an unsigned 8 bit word
-extern int decodeTime(struct dcfStreamStruct *pDcfMsg);       // time extraction
-extern void advanceCountClock();
-extern uint8_t signalDecode(unsigned long sysTime);
+int protoParityCheck(struct dcfStreamStruct *pDcfMsg); // parity check
+uint8_t parity(uint8_t value);                         // calcualte the parity of an unsigned 8 bit word
+int decodeTime(struct dcfStreamStruct *pDcfMsg);       // time extraction
+void advanceCountClock();
+uint8_t signalDecode(unsigned long sysTime);
+void buildBitstream(int dcfInfo);
 
 // dcfSetup requires the signal and the reset pin the dcf module is connected to.
 int dcfSetup(uint8_t signalPin, uint8_t resetPin)
@@ -176,25 +178,29 @@ the shortes signal time the dcf 77 decoder provides is a 100ms signal, to safely
 the sample function has to be called at least every 50ms */
 int dcfCheckSignal()
 {
-    timeStamp = millis(); // get the system time for this calculation
+    // reset the return value
+    retVal = 0;
+    // get the system time for this calculation
+    timeStamp = millis();
+    // lets see if we should advance the time
+    checkSecond(timeStamp);
 
-    checkSecond(timeStamp); // lets see if we should advance the time
-
-    // calculate the current timestamp for the next callF
-    timeStamp += deltaTime;
-
+    // build the bit stream
+    // if we decoded some information the return is either
+    // 0 - a 0 bit was detected
+    // 1 - a 1 bit was detected
+    // 2 - the minute signal was detected
     switch (signalDecode(timeStamp, digitalRead(dcf77signalPin)))
     {
-    case 0: // roll a 0 into the bitstream
-        dcf77BitStream >>= 1;
+    case 0:
+        buildBitstream(0);
         break;
-    case 1: // roll a 1 into the bitstream
-        dcf77BitStream >>= 1;
-        dcf77BitStream |= 0x8000000000000000;
+    case 1:
+        buildBitstream(1);
         break;
-    case 2: // move the bit stream entirely to the right
+    case 2:
+        // DCF transmits 59 BITs we use a 64bit storage
         dcf77BitStream >>= 5;
-
         // check if a valid, consistent telegram was received
         if (protoParityCheck((dcfStreamStruct *)&dcf77BitStream))
         {
@@ -202,22 +208,29 @@ int dcfCheckSignal()
             if (decodeTime((dcfStreamStruct *)&dcf77BitStream))
             {
                 // ok we got a valid signal
-                return (1);
+                retVal = 1;
             }
         }
-        // no valid telegram we
-        return (0);
-        break;
-    case 3: // do nothing
-        break;
-    case 4: // do nothing
         break;
     default:
+        retVal = 0;
         break;
     }
+    // calculate the current timestamp for the next callF
+    timeStamp += deltaTime;
+    return (retVal);
+}
 
-    // no valid telegram we
-    return (0);
+/* amend the bitstream with either a 0 or a 1 bit */
+void buildBitstream(int dcfInfo)
+{
+    // move the bit stream one bit to the right
+    // inserting a 0 bit on the highest bit
+    dcf77BitStream >>= 1;
+
+    if (dcfInfo == 1)
+        // set the new bit to 1
+        dcf77BitStream |= 0x8000000000000000;
 }
 
 /*
