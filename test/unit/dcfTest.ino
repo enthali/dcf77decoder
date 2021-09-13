@@ -35,7 +35,6 @@ struct dcfStreamStruct
 tinyTime testTime1, testTime2;
 
 // external variables
-
 extern unsigned long long dcf77BitStream;
 extern unsigned long secTimer;
 extern uint8_t sigBuffer;
