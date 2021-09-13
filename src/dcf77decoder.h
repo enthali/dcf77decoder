@@ -40,4 +40,4 @@ extern int dcfSetup(uint8_t signalPin, uint8_t resetPin);
 // the checkSignal() function is to be called regulary, it uses the internal millis system time to measure the delay between signals
 extern int dcfCheckSignal();
 
-#endifif
+#endif
