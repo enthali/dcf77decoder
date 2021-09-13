@@ -65,9 +65,10 @@ int retVal = 0;              // generic return valriable
 int protoParityCheck(struct dcfStreamStruct *pDcfMsg); // parity check
 uint8_t parity(uint8_t value);                         // calcualte the parity of an unsigned 8 bit word
 int decodeTime(struct dcfStreamStruct *pDcfMsg);       // time extraction
-void advanceCountClock();
-uint8_t signalDecode(unsigned long sysTime);
-void buildBitstream(int dcfInfo);
+void advanceCountClock();                              // move the clock ahead
+uint8_t signalDecode(unsigned long sysTime);           // decode the raw signal
+void buildBitstream(int dcfInfo);                      // assemble the bit stream
+int checkBitstream();                                  // validate the bit stream
 
 // dcfSetup requires the signal and the reset pin the dcf module is connected to.
 int dcfSetup(uint8_t signalPin, uint8_t resetPin)
@@ -199,18 +200,7 @@ int dcfCheckSignal()
         buildBitstream(1);
         break;
     case 2:
-        // DCF transmits 59 BITs we use a 64bit storage
-        dcf77BitStream >>= 5;
-        // check if a valid, consistent telegram was received
-        if (protoParityCheck((dcfStreamStruct *)&dcf77BitStream))
-        {
-            // ok go on
-            if (decodeTime((dcfStreamStruct *)&dcf77BitStream))
-            {
-                // ok we got a valid signal
-                retVal = 1;
-            }
-        }
+
         break;
     default:
         retVal = 0;
@@ -219,6 +209,25 @@ int dcfCheckSignal()
     // calculate the current timestamp for the next callF
     timeStamp += deltaTime;
     return (retVal);
+}
+
+/* check if the telegram received is valid */
+int checkBitstream()
+{
+    // reset the return value
+    retVal = 0;
+    // DCF transmits 59 BITs we use a 64bit storage prep the stream to align with the structure
+    dcf77BitStream >>= 5;
+    // check if a valid, consistent telegram was received
+    if (protoParityCheck((dcfStreamStruct *)&dcf77BitStream))
+    {
+        // ok go on
+        if (decodeTime((dcfStreamStruct *)&dcf77BitStream))
+        {
+            // ok we got a valid signal
+            retVal = 1;
+        }
+    }
 }
 
 /* amend the bitstream with either a 0 or a 1 bit */

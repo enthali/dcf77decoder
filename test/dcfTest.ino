@@ -192,3 +192,28 @@ test(buildBitstream)
     buildBitstream(1);
     assertEqual((int)(dcf77BitStream==0xa000000000000000),1);
 }
+
+test(protoParityCheck){
+    // get a struct pointer to the bitstream
+    struct dcfStreamStruct *pdcfTelegram;
+    pdcfTelegram = (struct dcfStreamStruct *) &dcf77BitStream;
+    dcf77BitStream=0; // clear the bitstream
+
+    // set some bits
+    // minutes
+    pdcfTelegram->minOnes = 1;
+    pdcfTelegram->minTens = 3;
+    // 3 bits set -> parity = 1;
+    pdcfTelegram->parMin=1;
+    // all the other bits contain 0 therefore the parity is also 0
+    assertEqual(protoParityCheck(pdcfTelegram),1);
+}
+
+test(parity){
+    assertEqual(parity(1),1);
+    assertEqual(parity(2),1);
+    assertEqual(parity(3),0);
+    assertEqual(parity(5),0);
+    assertEqual(parity(6),0);
+    assertEqual(parity(7),1);
+}
