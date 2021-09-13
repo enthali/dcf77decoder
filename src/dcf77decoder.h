@@ -18,14 +18,11 @@ struct tinyTime
 };
 
 // the clock is running on the internal counter
-#define STATUS_COUNT 0
-// the clock is running on the external DCF77 signal
-#define STATUS_DCF 1
+#define STATUS_DCF_BAD 0
 // the clock has received only 1 DCF77 signal and has not yet validated the signal
-#define STATUS_FIRST 2
-
-// advance the count clock
-extern void secTick(long timeDelta);
+#define STATUS_DCF_SINGLE 1
+// the clock is running on the external DCF77 signal
+#define STATUS_DCF_GOOD 2
 
 // get the current time structure
 extern tinyTime getTime();
@@ -43,4 +40,4 @@ extern int dcfSetup(uint8_t signalPin, uint8_t resetPin);
 // the checkSignal() function is to be called regulary, it uses the internal millis system time to measure the delay between signals
 extern int dcfCheckSignal();
 
-#endif
+#endifif
