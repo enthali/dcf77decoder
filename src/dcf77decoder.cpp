@@ -6,12 +6,6 @@ the decoder features a counting clock that allows to progress the time in case t
 #include <Arduino.h>
 #include <dcf77decoder.h>
 
-#define SIG_ERROR 4
-#define SIG_PAUSE 3
-#define SIG_MIN_PULSE 2
-#define SIG_BIT_1 1
-#define SIG_BIT_0 0
-
 /* constants */
 // bit time of a DCF 0 is 100 ms
 #define DCF_ZERO 136
@@ -19,6 +13,12 @@ the decoder features a counting clock that allows to progress the time in case t
 #define DCF_ONE 256
 // the "missing" 59th second give a minute pules of > 1800 ms
 #define DCF_MIN 1280
+// signal pauses states
+#define SIG_ERROR 4
+#define SIG_PAUSE 3
+#define SIG_MIN_PULSE 2
+#define SIG_BIT_1 1
+#define SIG_BIT_0 0
 
 // structs to decode the DCF77 bit stream
 struct dcfStreamStruct
@@ -51,24 +51,15 @@ uint64_t dcf77BitStream = 0xa061a060a061a060;
 tinyTime dcfInternalTime;
 
 // private global vairables
-uint8_t sigBuffer = 0;                       // to store the signal history
-unsigned char dcf77signalPin, dcf77resetPin; // the pins the DCF module is connected to
-unsigned long int secTimer;                  // a second timer based on system millis() to advance the seconds and keep the clock running when there's bad signal
-unsigned long sigTimeStamp = 0;              // last signal change system time
-unsigned long sysTimeStamp = 0;              // current valid system time
+uint8_t sigBuffer = 0;                 // to store the signal history
+uint8_t dcf77signalPin, dcf77resetPin; // the pins the DCF module is connected to
+uint32_t secTimer;                     // a second timer based on system millis() to advance the seconds and keep the clock running when there's bad signal
+uint32_t sigTimeStamp = 0;             // last signal change system time
+uint32_t sysTimeStamp = 0;             // current valid system time
 
 // temporary "reuseable" variables only used within functions w/o conext outside of any function
-int deltaTime = 0; // to measure the time between signal changes
-int retVal = 0;    // generic return valriable
-
-// private  functions forward declaraions
-int protoParityCheck(struct dcfStreamStruct *pDcfMsg); // parity check
-uint8_t parity(uint8_t value);                         // calcualte the parity of an unsigned 8 bit word
-int decodeTime(struct dcfStreamStruct *pDcfMsg);       // time extraction
-void advanceCountClock();                              // move the clock ahead
-uint8_t signalDecode(unsigned long sysTime);           // decode the raw signal
-void buildBitstream(int dcfInfo);                      // assemble the bit stream
-int checkBitstream();                                  // validate the bit stream
+int16_t deltaTime = 0; // to measure the time between signal changes
+int16_t retVal = 0;    // generic return valriable
 
 // dcfSetup requires the signal and the reset pin the dcf module is connected to.
 int dcfSetup(uint8_t signalPin, uint8_t resetPin)
@@ -114,7 +105,7 @@ check how much time passed since the last call. if it's more than a second, go a
 */
 int checkSecond(unsigned long time)
 {
-    int secCount = 0;
+    uint8_t secCount = 0;
     // how much time has passed?
     deltaTime = time - secTimer;
 
@@ -192,67 +183,8 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
     return (retVal);
 }
 
-/* this function hast to be called periodically to sample the input pin 
-the shortes signal time the dcf 77 decoder provides is a 100ms signal, to safely detect this signal
-the sample function has to be called at least every 50ms */
-int dcfCheckSignal()
-{
-    // reset the return value
-    retVal = 0;
-    // get the system time for this calculation
-    sysTimeStamp = millis();
-
-    // build the bit stream
-    // if we decoded some information the return is either
-    // 0 - a 0 bit was detected
-    // 1 - a 1 bit was detected
-    // 2 - the minute signal was detected
-    switch (signalDecode(sysTimeStamp, digitalRead(dcf77signalPin)))
-    {
-    case 0:
-        buildBitstream(0);
-        break;
-    case 1:
-        buildBitstream(1);
-        break;
-    case 2:
-        checkBitstream();
-        break;
-    default:
-        retVal = 0;
-        break;
-    }
-
-    // part 2, lets see if we should advance the time
-    checkSecond(sysTimeStamp);
-
-    // calculate the current timestamp for the next callF
-    sysTimeStamp += deltaTime;
-    return (retVal);
-}
-
-/* check if the telegram received is valid */
-int checkBitstream()
-{
-    // reset the return value
-    retVal = 0;
-    // DCF transmits 59 BITs we use a 64bit storage prep the stream to align with the structure
-    dcf77BitStream >>= 5;
-    // check if a valid, consistent telegram was received
-    if (protoParityCheck((dcfStreamStruct *)&dcf77BitStream))
-    {
-        // ok go on
-        if (decodeTime((dcfStreamStruct *)&dcf77BitStream))
-        {
-            // ok we got a valid signal
-            retVal = 1;
-        }
-    }
-    return (retVal);
-}
-
 /* amend the bitstream with either a 0 or a 1 bit */
-void buildBitstream(int dcfInfo)
+void buildBitstream(uint8_t dcfInfo)
 {
     // move the bit stream one bit to the right
     // inserting a 0 bit on the highest bit
@@ -261,6 +193,15 @@ void buildBitstream(int dcfInfo)
     if (dcfInfo == 1)
         // set the new bit to 1
         dcf77BitStream |= 0x8000000000000000;
+}
+
+// calculate the parity of the lower 4 bit of an unsigned 8 bit word;
+uint8_t parity(uint8_t value)
+{
+    value ^= value >> 2; // xor the lower 4 bit result into the lower 2
+    value ^= value >> 1; // yor the lower 2 bits result into lowest bit
+    value &= 1;          // parity bit is now the least significant bit, so erase any remaining the rest
+    return (value);
 }
 
 /*
@@ -294,15 +235,6 @@ int protoParityCheck(struct dcfStreamStruct *pDcfMsg)
     // telegram error, set status to STATUS_DCF_BAD
     dcfInternalTime.status = STATUS_DCF_BAD;
     return (0); // we don't have a valid time
-}
-
-// calculate the parity of the lower 4 bit of an unsigned 8 bit word;
-uint8_t parity(uint8_t value)
-{
-    value ^= value >> 2; // xor the lower 4 bit result into the lower 2
-    value ^= value >> 1; // yor the lower 2 bits result into lowest bit
-    value &= 1;          // parity bit is now the least significant bit, so erase any remaining the rest
-    return (value);
 }
 
 /*
@@ -348,4 +280,62 @@ int decodeTime(struct dcfStreamStruct *pDcfMsg)
         retVal = 1; // we have a validated time
     }
     return (retVal); // no valid time
+}
+/* check if the telegram received is valid */
+int checkBitstream()
+{
+    // reset the return value
+    retVal = 0;
+    // DCF transmits 59 BITs we use a 64bit storage prep the stream to align with the structure
+    dcf77BitStream >>= 5;
+    // check if a valid, consistent telegram was received
+    if (protoParityCheck((dcfStreamStruct *)&dcf77BitStream))
+    {
+        // ok go on
+        if (decodeTime((dcfStreamStruct *)&dcf77BitStream))
+        {
+            // ok we got a valid signal
+            retVal = 1;
+        }
+    }
+    return (retVal);
+}
+
+/* this function hast to be called periodically to sample the input pin 
+the shortes signal time the dcf 77 decoder provides is a 100ms signal, to safely detect this signal
+the sample function has to be called at least every 50ms */
+int dcfCheckSignal()
+{
+    // reset the return value
+    retVal = 0;
+    // get the system time for this calculation
+    sysTimeStamp = millis();
+
+    // build the bit stream
+    // if we decoded some information the return is either
+    // 0 - a 0 bit was detected
+    // 1 - a 1 bit was detected
+    // 2 - the minute signal was detected
+    switch (signalDecode(sysTimeStamp, digitalRead(dcf77signalPin)))
+    {
+    case 0:
+        buildBitstream(0);
+        break;
+    case 1:
+        buildBitstream(1);
+        break;
+    case 2:
+        checkBitstream();
+        break;
+    default:
+        retVal = 0;
+        break;
+    }
+
+    // part 2, lets see if we should advance the time
+    checkSecond(sysTimeStamp);
+
+    // calculate the current timestamp for the next callF
+    sysTimeStamp += deltaTime;
+    return (retVal);
 }
