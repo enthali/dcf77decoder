@@ -33,6 +33,7 @@ void loop()
 
     checkSignalJob.checkTime(deltaTime);
     printTimeJob.checkTime(deltaTime);
+    printBitStreamJob.checkTime(deltaTime);
 }
 
 void callDcf(long time)
