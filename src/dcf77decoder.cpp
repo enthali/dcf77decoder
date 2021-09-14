@@ -6,12 +6,11 @@ the decoder features a counting clock that allows to progress the time in case t
 #include <Arduino.h>
 #include <dcf77decoder.h>
 
-/* Debug switches */
-#undef DCF_DEBUG_TIMESTAMP
-#undef DCF_DEBUG_RAW_DATA
-#undef DCF_DEBUG_BITSTREAM
-#undef DCF_DEBUG_PARITY
-#undef DCF_DEBUG_DECODE
+#define SIG_ERROR 4
+#define SIG_PAUSE 3
+#define SIG_MIN_PULSE 2
+#define SIG_BIT_1 1
+#define SIG_BIT_0 0
 
 /* constants */
 // bit time of a DCF 0 is 100 ms
@@ -47,19 +46,20 @@ struct dcfStreamStruct
     uint64_t parDate : 1;        // date parity
 };
 // buffer to receive the dcf bitstream
-uint64_t dcf77BitStream = 0; // 0xa6a6a6a6a6a6a6a6;
+uint64_t dcf77BitStream = 0xa061a060a061a060;
 // structure to capture the decoded dcfTime
 tinyTime dcfInternalTime;
 
 // private global vairables
-uint8_t sigBuffer;                           // to store the signal history
+uint8_t sigBuffer = 0;                       // to store the signal history
 unsigned char dcf77signalPin, dcf77resetPin; // the pins the DCF module is connected to
 unsigned long int secTimer;                  // a second timer based on system millis() to advance the seconds and keep the clock running when there's bad signal
+unsigned long sigTimeStamp = 0;              // last signal change system time
+unsigned long sysTimeStamp = 0;              // current valid system time
 
 // temporary "reuseable" variables only used within functions w/o conext outside of any function
-unsigned long timeStamp = 0; // to calculate the time passed since the last signal change
-int deltaTime = 0;           // to measure the time between signal changes
-int retVal = 0;              // generic return valriable
+int deltaTime = 0; // to measure the time between signal changes
+int retVal = 0;    // generic return valriable
 
 // private  functions forward declaraions
 int protoParityCheck(struct dcfStreamStruct *pDcfMsg); // parity check
@@ -150,28 +150,46 @@ signalDecode expects the system time in millis and the signal of the input pin
 */
 uint8_t signalDecode(unsigned long sysTime, int signal)
 {
+    // reset return value
+    retVal = SIG_ERROR;
     // Check if the signal has changed since the last call.
     if (sigBuffer != signal)
     // Yes, the signal has changed
     {
         // save the signal state for the next call in buffer
         sigBuffer = signal;
-
         // use the current system time, and calculate the time that has elapsed since the last call.
-        deltaTime = sysTime - timeStamp;
+        deltaTime = sysTime - sigTimeStamp;
         // remember this time
-        timeStamp = sysTime;
+        sigTimeStamp = sysTime;
 
         if (deltaTime < DCF_ZERO)
-            return (0);
-        else if (deltaTime < DCF_ONE)
-            return (1);
-        else if (deltaTime > DCF_MIN)
-            return (2);
+        {
+            retVal = SIG_BIT_0;
+        }
         else
-            return (3);
+        {
+            if (deltaTime < DCF_ONE)
+            {
+                retVal = SIG_BIT_1;
+            }
+
+            else
+            {
+                if (deltaTime > DCF_MIN)
+                {
+                    retVal = SIG_MIN_PULSE;
+                }
+
+                else
+                {
+                    // pause between the individual bits
+                    retVal = SIG_PAUSE;
+                }
+            }
+        }
     }
-    return (4);
+    return (retVal);
 }
 
 /* this function hast to be called periodically to sample the input pin 
@@ -182,16 +200,14 @@ int dcfCheckSignal()
     // reset the return value
     retVal = 0;
     // get the system time for this calculation
-    timeStamp = millis();
-    // lets see if we should advance the time
-    checkSecond(timeStamp);
+    sysTimeStamp = millis();
 
     // build the bit stream
     // if we decoded some information the return is either
     // 0 - a 0 bit was detected
     // 1 - a 1 bit was detected
     // 2 - the minute signal was detected
-    switch (signalDecode(timeStamp, digitalRead(dcf77signalPin)))
+    switch (signalDecode(sysTimeStamp, digitalRead(dcf77signalPin)))
     {
     case 0:
         buildBitstream(0);
@@ -200,14 +216,18 @@ int dcfCheckSignal()
         buildBitstream(1);
         break;
     case 2:
-
+        checkBitstream();
         break;
     default:
         retVal = 0;
         break;
     }
+
+    // part 2, lets see if we should advance the time
+    checkSecond(sysTimeStamp);
+
     // calculate the current timestamp for the next callF
-    timeStamp += deltaTime;
+    sysTimeStamp += deltaTime;
     return (retVal);
 }
 
@@ -228,6 +248,7 @@ int checkBitstream()
             retVal = 1;
         }
     }
+    return (retVal);
 }
 
 /* amend the bitstream with either a 0 or a 1 bit */
@@ -270,7 +291,7 @@ int protoParityCheck(struct dcfStreamStruct *pDcfMsg)
             }
         }
     }
-    // telegram bad
+    // telegram error, set status to STATUS_DCF_BAD
     dcfInternalTime.status = STATUS_DCF_BAD;
     return (0); // we don't have a valid time
 }
@@ -290,36 +311,41 @@ uint8_t parity(uint8_t value)
 */
 int decodeTime(struct dcfStreamStruct *pDcfMsg)
 {
-    // simple check. check if the actual time is the same as the DCF signal.
-    if ((pDcfMsg->minOnes + pDcfMsg->minTens * 10) == dcfInternalTime.min + 1)
-    {
-        //telegram plausible, set the time status to good
-        dcfInternalTime.status = STATUS_DCF_GOOD;
-    }
-    else
-    {
-        // was the last telegram consistent?
-        if (dcfInternalTime.status = STATUS_DCF_SINGLE)
-        {
-            dcfInternalTime.status = STATUS_DCF_GOOD;
-        }
-        else
-        {
-            // the telegram is not in sequence, set the status to SINGLE
-            dcfInternalTime.status = STATUS_DCF_SINGLE;
-        }
-    }
-    secTimer = millis(); // reset the second counter
-    dcfInternalTime.sec = 0;
-    dcfInternalTime.min = pDcfMsg->minOnes + pDcfMsg->minTens * 10;
-    dcfInternalTime.hour = pDcfMsg->hourOnes + pDcfMsg->hourTens * 10;
-    dcfInternalTime.weekDay = pDcfMsg->weekday;
+    retVal = 0; // reset return value
 
-    // set the system time
+    // dcf time state machine
+    switch (dcfInternalTime.status)
+    {
+    case STATUS_DCF_BAD:
+        // first telegram after a telegram error, set the status to STATUS_DCF_SINGLE
+        dcfInternalTime.status = STATUS_DCF_SINGLE;
+        break;
+    case STATUS_DCF_SINGLE:
+        // second telegram after a telegram error, set the status to STATUS_DCF_GOOD
+        dcfInternalTime.status = STATUS_DCF_GOOD;
+        break;
+    case STATUS_DCF_GOOD:
+        // Check if current and last minute are in sequence
+        if ((pDcfMsg->minOnes + pDcfMsg->minTens * 10) != dcfInternalTime.min + 1)
+        {
+            // this telegram was not in sequence, set status back to STATUS_DCF_BAD
+            dcfInternalTime.status = STATUS_DCF_BAD;
+        }
+        break;
+
+    default:
+        break;
+    }
+
+    // set the system time and sync the secTimer
     if (dcfInternalTime.status == STATUS_DCF_GOOD)
     {
-        setTime(dcfInternalTime);
-        return (1); // we have a validated time
+        secTimer = millis(); // reset the second counter
+        dcfInternalTime.sec = 0;
+        dcfInternalTime.min = pDcfMsg->minOnes + pDcfMsg->minTens * 10;
+        dcfInternalTime.hour = pDcfMsg->hourOnes + pDcfMsg->hourTens * 10;
+        dcfInternalTime.weekDay = pDcfMsg->weekday;
+        retVal = 1; // we have a validated time
     }
-    return (0); // no valid time
+    return (retVal); // no valid time
 }
