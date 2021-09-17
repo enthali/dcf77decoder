@@ -1,10 +1,10 @@
 # dcf77decoder
 
-This Arduino library supports the decoding of the **DCF77** signal. 
-You need 
+This Arduino library supports the decoding of the **DCF77** signal.  
+You need  
 
 - a DCF77 receiver module and
-- an Arduino micro controller 
+- an Arduino micro controller  
 
 connect the  modules reset (or power input) and the signal pin to the microcontroller
 
