@@ -31,14 +31,14 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 #include <dcf77decoder.h>
 
 /* constants */
-// if a signal is faster than there's an issue
-#define DCF_ZERO_MIN 65
+
+// the signal time may vary by DCF_JITTER
+#define DCF_JITTER 20
 // bit time of a DCF 0 is 100 ms
-#define DCF_ZERO 136
+#define DCF_ZERO 100
 // bit time of a DCF 1 is 200ms
-#define DCF_ONE 256
-// the "missing" 59th second give a minute pules of > 1800 ms
-#define DCF_MIN 1280
+#define DCF_ONE 200
+
 // signal pauses states
 #define SIG_NO_SIG 32
 #define SIG_ERROR_SPIKE 9
@@ -47,6 +47,14 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 #define SIG_MIN_PULSE 2
 #define SIG_BIT_1 1
 #define SIG_BIT_0 0
+
+// defines for the signal state machine
+// signal state machine BIT state
+#define SIG_STATE_BIT 0
+// signal state machine PAUSE 0 (900ms) state
+#define SIG_STATE_PAUSE_0 1
+// signal state machine PAUSE 1 (800ms) state
+#define SIG_STATE_PAUSE_1 2
 
 // structs to decode the DCF77 bit stream
 struct dcfStreamStruct
@@ -78,12 +86,13 @@ uint64_t dcf77BitStream = 0xa061a060a061a060;
 // structure to capture the decoded dcfTime
 tinyTime dcfInternalTime;
 
-// private global vairables
+// private module vairables
 uint8_t sigBuffer = 0;                 // to store the signal history
 uint8_t dcf77signalPin, dcf77resetPin; // the pins the DCF module is connected to
 uint32_t secTimer;                     // a second timer based on system millis() to advance the seconds and keep the clock running when there's bad signal
 uint32_t sigTimeStamp = 0;             // last signal change system time
 uint32_t sysTimeStamp = 0;             // current valid system time
+uint8_t sigState = SIG_STATE_BIT;      // signal state macheine state
 
 // temporary "reuseable" variables only used within functions w/o conext outside of any function
 int16_t deltaTime = 0; // to measure the time between signal changes
@@ -125,7 +134,7 @@ void advanceCountClock()
     {
         dcfInternalTime.weekDay = 0;
     }
-    // here's where we need to implement day and month advancement ...
+    // here's where day and month advancement should be implemented...
 }
 
 /* 
@@ -160,65 +169,107 @@ tinyTime getTime()
 }
 
 /* signalDecode checks if the signal level changed and returns the signal code
-0 - a bit value 0 was detected
-1 - a bit value 1 was detected
-2 - the minute pulse was detected
-3 - bit pause detected
-4 - signal error - signal to fast
 signalDecode expects the system time in millis and the signal of the input pin
 */
 uint8_t signalDecode(unsigned long sysTime, int signal)
 {
-    // reset return value
+    // reset return value, prep for no signal
     retVal = SIG_NO_SIG;
     // Check if the signal has changed since the last call.
+
     if (sigBuffer != signal)
     // Yes, the signal has changed
     {
-        // signal change detected, but not yet if it is a valid change
-        retVal = SIG_ERROR;
+        // signal change detected,
         // save the signal state for the next call in buffer
         sigBuffer = signal;
+
         // use the current system time, and calculate the time that has elapsed since the last call.
         deltaTime = sysTime - sigTimeStamp;
-
-        // remember this time
-
         sigTimeStamp = sysTime;
 
-        // if the last change was shorter than DCF_1 it could be a 1
-        if (deltaTime < DCF_ONE)
+        switch (sigState)
         {
-            // short enough for a locial 0
-            retVal = SIG_BIT_1;
-        }
+        case SIG_STATE_BIT:
+            // state Bit possible exit events:
+            // 100ms -> bit 0 detected -> next state Pause 0
+            // 200ms -> bit 1 detected -> next state Pause 1
 
-        // if the last change was shorter than DCF_0 it could be a 0
-        if (deltaTime < DCF_ZERO)
-        {
-            // short enough for a logical 1
-            retVal = SIG_BIT_0;
-        }
+            // prepare for an error
+            retVal = SIG_ERROR;
+            sigState = SIG_STATE_BIT;
 
-        // anything smaller than DCF_ZERO_MIN was a spike
-        if (deltaTime < DCF_ZERO_MIN)
-        {
-            // this was to short
-            retVal = SIG_ERROR_SPIKE;
-        }
+            // check if delta time is within acceptable margin of DCF_ONE
+            if ((deltaTime > (DCF_ZERO - DCF_JITTER)) & (deltaTime < (DCF_ZERO + DCF_JITTER)))
+            {
+                // Bit 1 detected
+                retVal = SIG_BIT_0;
+                sigState = SIG_STATE_PAUSE_0;
+            }
+            if ((deltaTime > (DCF_ONE - DCF_JITTER)) & (deltaTime < (DCF_ONE + DCF_JITTER)))
+            {
+                // Bit 0 detected
+                retVal = SIG_BIT_1;
+                sigState = SIG_STATE_PAUSE_1;
+            }
+            break;
 
-        // if the pause was larger than DCF_ONE it could be the pause between seconds
-        if (deltaTime > DCF_ONE)
-        {
-            // could be a pause between the individual bits
-            retVal = SIG_PAUSE;
-        }
+        case SIG_STATE_PAUSE_1:
+            // state Pause 1 possible exit events:
+            // 800ms -> pause detected -> next state bit
+            // 1800ms -> min_sync detected -> next state bit
 
-        // if the pause was even longer than DCF_MIN it is most likely a minute pulse
-        if (deltaTime > DCF_MIN)
-        {
-            // large pause could be the min pulse
-            retVal = SIG_MIN_PULSE;
+            // prepare for an error
+            retVal = SIG_ERROR;
+            sigState = SIG_STATE_BIT;
+
+            // check if delta time is within acceptable margin of a pause after a bit 0 has been received
+            if ((deltaTime > (1000 - DCF_ONE - DCF_JITTER)) & (deltaTime < (1000 - DCF_ONE + DCF_JITTER)))
+            {
+                // Bit 0 detected
+                retVal = SIG_PAUSE;
+                sigState = SIG_STATE_BIT;
+            }
+
+            // check if delta time is within acceptable margin of a pause after a bit 0 and the minute sync has been received
+            if ((deltaTime > (2000 - DCF_ONE - DCF_JITTER)) & (deltaTime < (2000 - DCF_ONE + DCF_JITTER)))
+            {
+                // Bit 0 detected
+                retVal = SIG_MIN_PULSE;
+                sigState = SIG_STATE_BIT;
+            }
+            break;
+
+        case SIG_STATE_PAUSE_0:
+            // state Pause 0 possible exit events:
+            // 900ms -> pause detected -> next state bit
+            // 1900ms -> min_sync detected -> next state bit
+
+            // prepare for an error
+            retVal = SIG_ERROR;
+            sigState = SIG_STATE_BIT;
+            // check if delta time is within acceptable margin of a pause after a bit 0 has been received
+            if ((deltaTime > (1000 - DCF_ZERO - DCF_JITTER)) & (deltaTime < (1000 - DCF_ZERO + DCF_JITTER)))
+            {
+                // Bit 0 detected
+                retVal = SIG_PAUSE;
+                sigState = SIG_STATE_BIT;
+            }
+
+            // check if delta time is within acceptable margin of a pause after a bit 0 and the minute sync has been received
+            if ((deltaTime > (2000 - DCF_ZERO - DCF_JITTER)) & (deltaTime < (2000 - DCF_ZERO + DCF_JITTER)))
+            {
+                // Bit 0 detected
+                retVal = SIG_MIN_PULSE;
+                sigState = SIG_STATE_BIT;
+            }
+            break;
+
+        default:
+            // anything else would be an error
+            retVal = SIG_ERROR;
+            sigState = SIG_STATE_BIT;
+            break;
         }
     }
     return (retVal);
@@ -362,18 +413,28 @@ int dcfCheckSignal()
     case SIG_BIT_0:
         buildBitstream(0);
         break;
+
     case SIG_BIT_1:
         buildBitstream(1);
         break;
+
     case SIG_MIN_PULSE:
         checkBitstream();
         break;
+
     case SIG_PAUSE:
         break;
+
     case SIG_ERROR:
+        // if there's any bit error set the time status to BAD
+        dcfInternalTime.status = STATUS_DCF_BAD;
         break;
+
     case SIG_ERROR_SPIKE:
+        // if there's any bit error set the time status to BAD
+        dcfInternalTime.status = STATUS_DCF_BAD;
         break;
+
     default:
         retVal = 0;
         break;
