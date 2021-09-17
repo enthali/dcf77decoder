@@ -31,6 +31,8 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 #include <dcf77decoder.h>
 
 /* constants */
+// if a signal is faster than there's an issue
+#define DCF_ZERO_MIN 65
 // bit time of a DCF 0 is 100 ms
 #define DCF_ZERO 136
 // bit time of a DCF 1 is 200ms
@@ -38,8 +40,10 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 // the "missing" 59th second give a minute pules of > 1800 ms
 #define DCF_MIN 1280
 // signal pauses states
-#define SIG_ERROR 4
-#define SIG_PAUSE 3
+#define SIG_NO_SIG 32
+#define SIG_ERROR_SPIKE 9
+#define SIG_ERROR 8
+#define SIG_PAUSE 4
 #define SIG_MIN_PULSE 2
 #define SIG_BIT_1 1
 #define SIG_BIT_0 0
@@ -160,48 +164,63 @@ tinyTime getTime()
 1 - a bit value 1 was detected
 2 - the minute pulse was detected
 3 - bit pause detected
-4 - no change detected
+4 - signal error - signal to fast
 signalDecode expects the system time in millis and the signal of the input pin
 */
 uint8_t signalDecode(unsigned long sysTime, int signal)
 {
     // reset return value
-    retVal = SIG_ERROR;
+    retVal = SIG_NO_SIG;
     // Check if the signal has changed since the last call.
     if (sigBuffer != signal)
     // Yes, the signal has changed
     {
+        // signal change detected, but not yet if it is a valid change
+        retVal = SIG_ERROR;
         // save the signal state for the next call in buffer
         sigBuffer = signal;
         // use the current system time, and calculate the time that has elapsed since the last call.
         deltaTime = sysTime - sigTimeStamp;
+        Serial.print("Signal change delta time :");
+        Serial.println(deltaTime);
+
         // remember this time
+
         sigTimeStamp = sysTime;
 
+        // if the last change was shorter than DCF_1 it could be a 1
+        if (deltaTime < DCF_ONE)
+        {
+            // short enough for a locial 0
+            retVal = SIG_BIT_1;
+        }
+
+        // if the last change was shorter than DCF_0 it could be a 0
         if (deltaTime < DCF_ZERO)
         {
+            // short enough for a logical 1
             retVal = SIG_BIT_0;
         }
-        else
+
+        // anything smaller than DCF_ZERO_MIN was a spike
+        if (deltaTime < DCF_ZERO_MIN)
         {
-            if (deltaTime < DCF_ONE)
-            {
-                retVal = SIG_BIT_1;
-            }
+            // this was to short
+            retVal = SIG_ERROR_SPIKE;
+        }
 
-            else
-            {
-                if (deltaTime > DCF_MIN)
-                {
-                    retVal = SIG_MIN_PULSE;
-                }
+        // if the pause was larger than DCF_ONE it could be the pause between seconds
+        if (deltaTime > DCF_ONE)
+        {
+            // could be a pause between the individual bits
+            retVal = SIG_PAUSE;
+        }
 
-                else
-                {
-                    // pause between the individual bits
-                    retVal = SIG_PAUSE;
-                }
-            }
+        // if the pause was even longer than DCF_MIN it is most likely a minute pulse
+        if (deltaTime > DCF_MIN)
+        {
+            // large pause could be the min pulse
+            retVal = SIG_MIN_PULSE;
         }
     }
     return (retVal);
@@ -342,14 +361,26 @@ int dcfCheckSignal()
     // 2 - the minute signal was detected
     switch (signalDecode(sysTimeStamp, digitalRead(dcf77signalPin)))
     {
-    case 0:
+    case SIG_BIT_0:
+        Serial.println(" Bit 0 detected");
         buildBitstream(0);
         break;
-    case 1:
+    case SIG_BIT_1:
+        Serial.println(" Bit 1 detected");
         buildBitstream(1);
         break;
-    case 2:
+    case SIG_MIN_PULSE:
+        Serial.println(" Minute Pulse detected");
         checkBitstream();
+        break;
+    case SIG_PAUSE:
+        Serial.println(" Signal pause");
+        break;
+    case SIG_ERROR:
+        Serial.println(" Signal ERROR");
+        break;
+    case SIG_ERROR_SPIKE:
+        Serial.println(" Signal ERROR SPIKE");
         break;
     default:
         retVal = 0;
