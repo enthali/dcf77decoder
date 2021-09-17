@@ -181,8 +181,6 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
         sigBuffer = signal;
         // use the current system time, and calculate the time that has elapsed since the last call.
         deltaTime = sysTime - sigTimeStamp;
-        Serial.print("Signal change delta time :");
-        Serial.println(deltaTime);
 
         // remember this time
 
@@ -362,25 +360,19 @@ int dcfCheckSignal()
     switch (signalDecode(sysTimeStamp, digitalRead(dcf77signalPin)))
     {
     case SIG_BIT_0:
-        Serial.println(" Bit 0 detected");
         buildBitstream(0);
         break;
     case SIG_BIT_1:
-        Serial.println(" Bit 1 detected");
         buildBitstream(1);
         break;
     case SIG_MIN_PULSE:
-        Serial.println(" Minute Pulse detected");
         checkBitstream();
         break;
     case SIG_PAUSE:
-        Serial.println(" Signal pause");
         break;
     case SIG_ERROR:
-        Serial.println(" Signal ERROR");
         break;
     case SIG_ERROR_SPIKE:
-        Serial.println(" Signal ERROR SPIKE");
         break;
     default:
         retVal = 0;

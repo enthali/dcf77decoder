@@ -70,7 +70,7 @@ extern int protoParityCheck(struct dcfStreamStruct *pDcfMsg);   // parity check
 extern uint8_t parity(uint8_t value);                           // calcualte the parity of an unsigned 8 bit word
 extern int decodeTime(struct dcfStreamStruct *pDcfMsg);         // time extraction
 extern uint8_t signalDecode(unsigned long sysTime, int signal); // deoode the signal
-extern void buildBitstream(int dcfInfo);                        // add a 0 or a 1 oto the bitstream
+extern void buildBitstream(uint8_t dcfInfo);                        // add a 0 or a 1 oto the bitstream
 
 void setup()
 {
@@ -194,12 +194,12 @@ test(signalDecode)
 {
     sigBuffer = 0;
     deltaTime = 0;
-    assertEqual(signalDecode(100, 0), 4);  // no signal change, expect  4 as return value
+    assertEqual(signalDecode(100, 0), 32);  // no signal change, expect  4 as return value
     assertEqual(signalDecode(120, 1), 0);  // should be a bit 0
-    assertEqual(signalDecode(999, 1), 4);  // o signal change, expect  4 as return value
-    assertEqual(signalDecode(1000, 0), 3); // 1 sec signal break to 0
+    assertEqual(signalDecode(999, 1), 32);  // o signal change, expect  4 as return value
+    assertEqual(signalDecode(1000, 0), 4); // 1 sec signal break to 0
     assertEqual(signalDecode(1220, 1), 1); // should be a bit 1
-    assertEqual(signalDecode(2200, 1), 4); // no signal change, expect  4 as return value
+    assertEqual(signalDecode(2200, 1), 32); // no signal change, expect  4 as return value
     assertEqual(signalDecode(3000, 0), 2); // 1 sec missing -> min pulse
     assertEqual(signalDecode(3220, 1), 1); // should be a bit 1
 }
