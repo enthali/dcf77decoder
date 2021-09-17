@@ -33,7 +33,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 /* constants */
 
 // the signal time may vary by DCF_JITTER
-#define DCF_JITTER 20
+#define DCF_JITTER 32
 // bit time of a DCF 0 is 100 ms
 #define DCF_ZERO 100
 // bit time of a DCF 1 is 200ms
@@ -134,6 +134,21 @@ void advanceCountClock()
     {
         dcfInternalTime.weekDay = 0;
     }
+
+    Serial.print("Weekday : ");
+    Serial.print(dcfInternalTime.weekDay);
+    Serial.print("   Time : ");
+    Serial.print(dcfInternalTime.hour);
+    Serial.print(":");
+    Serial.print(dcfInternalTime.min);
+    Serial.print(":");
+    Serial.print(dcfInternalTime.sec);
+    Serial.print(" - time status : ");
+    Serial.print(dcfInternalTime.status);
+    Serial.print("  Signal State Machine : ");
+    Serial.println(sigState);
+    Serial.println();
+
     // here's where day and month advancement should be implemented...
 }
 
@@ -187,6 +202,8 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
         // use the current system time, and calculate the time that has elapsed since the last call.
         deltaTime = sysTime - sigTimeStamp;
         sigTimeStamp = sysTime;
+
+        Serial.println(deltaTime);
 
         switch (sigState)
         {
@@ -349,10 +366,17 @@ int decodeTime(struct dcfStreamStruct *pDcfMsg)
         dcfInternalTime.status = STATUS_DCF_GOOD;
         break;
     case STATUS_DCF_GOOD:
-        // Check if current and last minute are in sequence
-        if ((pDcfMsg->minOnes + pDcfMsg->minTens * 10) != dcfInternalTime.min + 1)
+        // Check if current and last telegram are in sequence
+        // the internal clock could run slow or fast therefore the internal time could be already the same as the new telegram or one minute older
+        deltaTime = pDcfMsg->minOnes + pDcfMsg->minTens * 10;
+        if (!((deltaTime == dcfInternalTime.min + 1) || (deltaTime == dcfInternalTime.min)))
         {
             // this telegram was not in sequence, set status back to STATUS_DCF_BAD
+            Serial.print("Minute Missmatch : ");
+            Serial.print(pDcfMsg->minOnes + pDcfMsg->minTens * 10);
+            Serial.print("  :  ");
+            Serial.print(dcfInternalTime.min + 1);
+            Serial.println();
             dcfInternalTime.status = STATUS_DCF_BAD;
         }
         break;
@@ -364,7 +388,7 @@ int decodeTime(struct dcfStreamStruct *pDcfMsg)
     // set the system time and sync the secTimer
     if (dcfInternalTime.status == STATUS_DCF_GOOD)
     {
-        secTimer = millis(); // reset the second counter
+        secTimer = sysTimeStamp; // reset the second counter
         dcfInternalTime.sec = 0;
         dcfInternalTime.min = pDcfMsg->minOnes + pDcfMsg->minTens * 10;
         dcfInternalTime.hour = pDcfMsg->hourOnes + pDcfMsg->hourTens * 10;
