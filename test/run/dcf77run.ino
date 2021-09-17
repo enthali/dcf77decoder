@@ -29,7 +29,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 #include <dcf77decoder.h>
 #include <timeJobs.h>
 
-Job printTimeJob, printBitStreamJob, checkSignalJob;
+Job printTimeJob, printBitStreamJob;
 tinyTime dcfTime;
 
 // external variables
@@ -44,9 +44,6 @@ void setup()
 
     Serial.begin(115200);
 
-    checkSignalJob.setInterval(8);
-    checkSignalJob.setFunction(&callDcf);
-
     printTimeJob.setInterval(1000);
     printTimeJob.setFunction(&printTime);
 
@@ -59,14 +56,10 @@ void loop()
     static long deltaTime;           // timeCheck will return the time passed since last loop. this might be any value from 0 - no time passed to what ever time the last loop took
     deltaTime = timeCheck(millis()); // let's see how much time has past since the last loop
 
-    checkSignalJob.checkTime(deltaTime);
-    printTimeJob.checkTime(deltaTime);
-    printBitStreamJob.checkTime(deltaTime);
-}
+    dcfCheckSignal(); // this function can simply be called on each loop pass
 
-void callDcf(long time)
-{
-    dcfCheckSignal();
+    printTimeJob.checkTime(deltaTime);      // print the time about once per second
+    printBitStreamJob.checkTime(deltaTime); // print the Bitstream about every second
 }
 
 void printTime(long time)
