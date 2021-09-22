@@ -33,7 +33,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 /* constants */
 
 // the signal time may vary by DCF_JITTER
-#define DCF_JITTER 20
+#define DCF_JITTER 32
 // bit time of a DCF 0 is 100 ms
 #define DCF_ZERO 100
 // bit time of a DCF 1 is 200ms
@@ -355,6 +355,9 @@ int decodeTime(struct dcfStreamStruct *pDcfMsg)
         if (!((deltaTime == dcfInternalTime.min + 1) || (deltaTime == dcfInternalTime.min)))
         {
             dcfInternalTime.status = STATUS_DCF_BAD;
+            Serial.print("Minute Error : ");
+            Serial.print(deltaTime);
+            Serial.println();
         }
         break;
 
