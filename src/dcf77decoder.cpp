@@ -229,9 +229,7 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
             // state Pause 1 possible exit events:
             // 800ms -> pause detected -> next state bit
             // 1800ms -> min_sync detected -> next state bit
-
-            // prepare for an error
-            retVal = SIG_ERROR;
+            // in any other case next stage is BIT
             sigState = SIG_STATE_BIT;
 
             // check if delta time is within acceptable margin of a pause after a bit 0 has been received
@@ -239,7 +237,6 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
             {
                 // Bit 0 detected
                 retVal = SIG_PAUSE;
-                sigState = SIG_STATE_BIT;
             }
 
             // check if delta time is within acceptable margin of a pause after a bit 0 and the minute sync has been received
@@ -247,7 +244,6 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
             {
                 // Bit 0 detected
                 retVal = SIG_MIN_PULSE;
-                sigState = SIG_STATE_BIT;
             }
 
             // DEBUG
@@ -262,16 +258,14 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
             // state Pause 0 possible exit events:
             // 900ms -> pause detected -> next state bit
             // 1900ms -> min_sync detected -> next state bit
-
-            // prepare for an error
-            retVal = SIG_ERROR;
+            // in any other case next stage is BIT
             sigState = SIG_STATE_BIT;
+
             // check if delta time is within acceptable margin of a pause after a bit 0 has been received
             if ((deltaTime > (1000 - DCF_ZERO - DCF_JITTER)) & (deltaTime < (1000 - DCF_ZERO + DCF_JITTER)))
             {
                 // Bit 0 detected
                 retVal = SIG_PAUSE;
-                sigState = SIG_STATE_BIT;
             }
 
             // check if delta time is within acceptable margin of a pause after a bit 0 and the minute sync has been received
@@ -279,7 +273,6 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
             {
                 // Bit 0 detected
                 retVal = SIG_MIN_PULSE;
-                sigState = SIG_STATE_BIT;
             }
 
             // DEBUG
@@ -293,18 +286,11 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
         default:
             // anything else would be an error
             retVal = SIG_ERROR;
+            // and return to state BIT
             sigState = SIG_STATE_BIT;
             break;
         }
-
-        // DEBUG
-        if (retVal == SIG_ERROR)
-        {
-            Serial.print("Signal Error : ");
-            Serial.println(deltaTime);
-        }
     }
-
     return (retVal);
 }
 
