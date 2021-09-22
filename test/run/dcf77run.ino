@@ -34,7 +34,6 @@ tinyTime dcfTime;
 
 // external variables
 extern unsigned long long dcf77BitStream;
-extern uint8_t sigState;
 
 void setup()
 {
@@ -76,8 +75,6 @@ void printTime(long time)
     Serial.print(dcfTime.sec);
     Serial.print(" - time status : ");
     Serial.print(dcfTime.status);
-    Serial.print("  Signal State Machine : ");
-    Serial.print(sigState);
     Serial.println();
 }
 
