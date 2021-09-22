@@ -444,7 +444,5 @@ int dcfCheckSignal()
     // part 2, lets see if we should advance the time
     checkSecond(sysTimeStamp);
 
-    // calculate the current timestamp for the next callF
-    sysTimeStamp += deltaTime;
     return (retVal);
 }
