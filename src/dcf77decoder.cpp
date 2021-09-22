@@ -188,8 +188,6 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
         deltaTime = sysTime - sigTimeStamp;
         sigTimeStamp = sysTime;
 
-        Serial.println(deltaTime);
-
         switch (sigState)
         {
         case SIG_STATE_BIT:
@@ -356,12 +354,6 @@ int decodeTime(struct dcfStreamStruct *pDcfMsg)
         deltaTime = pDcfMsg->minOnes + pDcfMsg->minTens * 10;
         if (!((deltaTime == dcfInternalTime.min + 1) || (deltaTime == dcfInternalTime.min)))
         {
-            // this telegram was not in sequence, set status back to STATUS_DCF_BAD
-            Serial.print("Minute Missmatch : ");
-            Serial.print(pDcfMsg->minOnes + pDcfMsg->minTens * 10);
-            Serial.print("  :  ");
-            Serial.print(dcfInternalTime.min + 1);
-            Serial.println();
             dcfInternalTime.status = STATUS_DCF_BAD;
         }
         break;
