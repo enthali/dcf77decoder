@@ -188,6 +188,8 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
         deltaTime = sysTime - sigTimeStamp;
         sigTimeStamp = sysTime;
 
+        Serial.println(deltaTime);
+
         switch (sigState)
         {
         case SIG_STATE_BIT:
@@ -349,10 +351,17 @@ int decodeTime(struct dcfStreamStruct *pDcfMsg)
         dcfInternalTime.status = STATUS_DCF_GOOD;
         break;
     case STATUS_DCF_GOOD:
-        // Check if current and last minute are in sequence
-        if ((pDcfMsg->minOnes + pDcfMsg->minTens * 10) != dcfInternalTime.min + 1)
+        // Check if current and last telegram are in sequence
+        // the internal clock could run slow or fast therefore the internal time could be already the same as the new telegram or one minute older
+        deltaTime = pDcfMsg->minOnes + pDcfMsg->minTens * 10;
+        if (!((deltaTime == dcfInternalTime.min + 1) || (deltaTime == dcfInternalTime.min)))
         {
             // this telegram was not in sequence, set status back to STATUS_DCF_BAD
+            Serial.print("Minute Missmatch : ");
+            Serial.print(pDcfMsg->minOnes + pDcfMsg->minTens * 10);
+            Serial.print("  :  ");
+            Serial.print(dcfInternalTime.min + 1);
+            Serial.println();
             dcfInternalTime.status = STATUS_DCF_BAD;
         }
         break;
@@ -364,7 +373,7 @@ int decodeTime(struct dcfStreamStruct *pDcfMsg)
     // set the system time and sync the secTimer
     if (dcfInternalTime.status == STATUS_DCF_GOOD)
     {
-        secTimer = millis(); // reset the second counter
+        secTimer = sysTimeStamp; // reset the second counter
         dcfInternalTime.sec = 0;
         dcfInternalTime.min = pDcfMsg->minOnes + pDcfMsg->minTens * 10;
         dcfInternalTime.hour = pDcfMsg->hourOnes + pDcfMsg->hourTens * 10;
