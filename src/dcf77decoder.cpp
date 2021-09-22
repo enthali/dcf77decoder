@@ -33,7 +33,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 /* constants */
 
 // the signal time may vary by DCF_JITTER
-#define DCF_JITTER 32
+#define DCF_JITTER 36
 // bit time of a DCF 0 is 100 ms
 #define DCF_ZERO 100
 // bit time of a DCF 1 is 200ms
@@ -193,16 +193,15 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
         Serial.print(deltaTime);
         Serial.println();
 */
+        // prepare for an error
+        retVal = SIG_ERROR;
+
         switch (sigState)
         {
         case SIG_STATE_BIT:
             // state Bit possible exit events:
             // 100ms -> bit 0 detected -> next state Pause 0
             // 200ms -> bit 1 detected -> next state Pause 1
-
-            // prepare for an error
-            retVal = SIG_ERROR;
-            sigState = SIG_STATE_BIT;
 
             // check if delta time is within acceptable margin of DCF_ONE
             if ((deltaTime > (DCF_ZERO - DCF_JITTER)) & (deltaTime < (DCF_ZERO + DCF_JITTER)))
