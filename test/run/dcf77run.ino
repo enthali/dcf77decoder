@@ -60,7 +60,7 @@ void loop()
     dcfCheckSignal(); // this function can simply be called on each loop pass
 
     printTimeJob.checkTime(deltaTime);      // print the time about once per second
-    printBitStreamJob.checkTime(deltaTime); // print the Bitstream about every second
+    //printBitStreamJob.checkTime(deltaTime); // print the Bitstream about every second
 }
 
 void printTime(long time)
@@ -77,7 +77,7 @@ void printTime(long time)
     Serial.print(" - time status : ");
     Serial.print(dcfTime.status);
     Serial.print("  Signal State Machine : ");
-    Serial.println(sigState);
+    Serial.print(sigState);
     Serial.println();
 }
 

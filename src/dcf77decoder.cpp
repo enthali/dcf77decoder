@@ -188,6 +188,11 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
         deltaTime = sysTime - sigTimeStamp;
         sigTimeStamp = sysTime;
 
+        //DEBUG
+        /*Serial.print("Signal change sysTime : ");
+        Serial.print(deltaTime);
+        Serial.println();
+*/
         switch (sigState)
         {
         case SIG_STATE_BIT:
@@ -211,6 +216,13 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
                 // Bit 0 detected
                 retVal = SIG_BIT_1;
                 sigState = SIG_STATE_PAUSE_1;
+            }
+
+            // DEBUG
+            if (retVal == SIG_ERROR)
+            {
+                Serial.print("Signal but no transition to state Pause 1 or 0 to State BIT : ");
+                Serial.println(deltaTime);
             }
             break;
 
@@ -238,6 +250,13 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
                 retVal = SIG_MIN_PULSE;
                 sigState = SIG_STATE_BIT;
             }
+
+            // DEBUG
+            if (retVal == SIG_ERROR)
+            {
+                Serial.print("Signal but no transition to state BIT from Pause 1 : ");
+                Serial.println(deltaTime);
+            }
             break;
 
         case SIG_STATE_PAUSE_0:
@@ -263,6 +282,13 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
                 retVal = SIG_MIN_PULSE;
                 sigState = SIG_STATE_BIT;
             }
+
+            // DEBUG
+            if (retVal == SIG_ERROR)
+            {
+                Serial.print("Signal but no transition to state BIT from Pause 0 : ");
+                Serial.println(deltaTime);
+            }
             break;
 
         default:
@@ -271,7 +297,15 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
             sigState = SIG_STATE_BIT;
             break;
         }
+
+        // DEBUG
+        if (retVal == SIG_ERROR)
+        {
+            Serial.print("Signal Error : ");
+            Serial.println(deltaTime);
+        }
     }
+
     return (retVal);
 }
 
