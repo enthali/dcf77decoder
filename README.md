@@ -15,6 +15,12 @@ Installation
 copy the content of this project into your arduino library folder
 
 revision history
+v1.1 improved signal detection
+    This version includes improved signal detection that enables error detection at the bit level.
+    known problems :
+        - Library does not detect when a receiver module stops sending signals
+
 v1.0 first public release
     known problems :
-        library does not detect if a receiver module not sending any signals any more
+        - Library does not detect when a receiver module stops sending signals
+        - Error handling only on telegram level
