@@ -188,11 +188,6 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
         deltaTime = sysTime - sigTimeStamp;
         sigTimeStamp = sysTime;
 
-        //DEBUG
-        /*Serial.print("Signal change sysTime : ");
-        Serial.print(deltaTime);
-        Serial.println();
-*/
         // prepare for an error
         retVal = SIG_ERROR;
 
@@ -216,13 +211,6 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
                 retVal = SIG_BIT_1;
                 sigState = SIG_STATE_PAUSE_1;
             }
-
-            // DEBUG
-            if (retVal == SIG_ERROR)
-            {
-                Serial.print("Signal but no transition to state Pause 1 or 0 to State BIT : ");
-                Serial.println(deltaTime);
-            }
             break;
 
         case SIG_STATE_PAUSE_1:
@@ -245,13 +233,6 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
                 // Bit 0 detected
                 retVal = SIG_MIN_PULSE;
             }
-
-            // DEBUG
-            if (retVal == SIG_ERROR)
-            {
-                Serial.print("Signal but no transition to state BIT from Pause 1 : ");
-                Serial.println(deltaTime);
-            }
             break;
 
         case SIG_STATE_PAUSE_0:
@@ -273,13 +254,6 @@ uint8_t signalDecode(unsigned long sysTime, int signal)
             {
                 // Bit 0 detected
                 retVal = SIG_MIN_PULSE;
-            }
-
-            // DEBUG
-            if (retVal == SIG_ERROR)
-            {
-                Serial.print("Signal but no transition to state BIT from Pause 0 : ");
-                Serial.println(deltaTime);
             }
             break;
 
@@ -374,9 +348,6 @@ int decodeTime(struct dcfStreamStruct *pDcfMsg)
         if (!((deltaTime == dcfInternalTime.min + 1) || (deltaTime == dcfInternalTime.min)))
         {
             dcfInternalTime.status = STATUS_DCF_BAD;
-            Serial.print("Minute Error : ");
-            Serial.print(deltaTime);
-            Serial.println();
         }
         break;
 
