@@ -106,6 +106,10 @@ int dcfSetup(uint8_t signalPin, uint8_t resetPin)
     pinMode(dcf77signalPin, INPUT_PULLUP);
     pinMode(dcf77resetPin, OUTPUT);
     digitalWrite(dcf77resetPin, HIGH);
+
+    // initial time
+    // dcfInternalTime is 0 for all fields - fine exept for the weekday
+    dcfInternalTime.weekDay = 1; //
 };
 
 /* advanceClock
@@ -132,7 +136,7 @@ void advanceCountClock()
     }
     if (dcfInternalTime.weekDay >= 8)
     {
-        dcfInternalTime.weekDay = 0;
+        dcfInternalTime.weekDay = 1; // weekdays Monday = 1 ... Sunday = 7
     }
     // here's where day and month advancement should be implemented...
 }
